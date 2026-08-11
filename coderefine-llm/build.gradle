@@ -1,0 +1,6 @@
+dependencies {
+    implementation project(':coderefine-core')
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    implementation 'org.slf4j:slf4j-api'
+}

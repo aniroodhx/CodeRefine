@@ -1,0 +1,11 @@
+plugins {
+    id 'org.springframework.boot'
+}
+
+dependencies {
+    implementation project(':coderefine-core')
+    implementation project(':coderefine-llm')
+    implementation project(':coderefine-verify')
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'ch.qos.logback:logback-classic'
+}

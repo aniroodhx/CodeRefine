@@ -1,0 +1,6 @@
+rootProject.name = 'CodeRefine'
+
+include 'coderefine-core'
+include 'coderefine-llm'
+include 'coderefine-verify'
+include 'coderefine-cli'
