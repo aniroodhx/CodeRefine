@@ -5,7 +5,6 @@ import com.coderefine.cli.pipeline.CodeRefinePipeline;
 import com.coderefine.cli.report.PipelineReport;
 import com.coderefine.cli.report.ReportPrinter;
 import com.coderefine.llm.PatchGenerator;
-import com.coderefine.llm.client.ClaudeClient;
 import com.coderefine.llm.client.GeminiClient;
 import com.coderefine.llm.client.LLMClient;
 import org.slf4j.Logger;
@@ -41,10 +40,9 @@ public class CodeRefineRunner implements CommandLineRunner {
         LLMClient llmClient = resolveLLMClient(env);
         if (llmClient == null) {
             System.err.println("""
-                    Error: No LLM API key found.
-                    Set a key in a .env file (see .env.example) or export one:
+                    Error: No Gemini API key found.
+                    Set it in a .env file (see .env.example) or export one:
                       GEMINI_API_KEY=your-key
-                      ANTHROPIC_API_KEY=your-key
                     """);
             return;
         }
@@ -65,13 +63,6 @@ public class CodeRefineRunner implements CommandLineRunner {
             String model = env.getOrDefault("GEMINI_MODEL", "gemini-2.5-flash");
             log.info("Using Gemini ({})", model);
             return new GeminiClient(geminiKey, model);
-        }
-
-        String anthropicKey = env.get("ANTHROPIC_API_KEY");
-        if (anthropicKey != null && !anthropicKey.isBlank()) {
-            String model = env.getOrDefault("ANTHROPIC_MODEL", "claude-sonnet-5");
-            log.info("Using Claude ({})", model);
-            return new ClaudeClient(anthropicKey, model);
         }
 
         return null;
@@ -95,10 +86,8 @@ public class CodeRefineRunner implements CommandLineRunner {
                   --no-verify    Skip sandboxed verification (Layer 3)
 
                 Configuration (via .env file or environment variables):
-                  GEMINI_API_KEY      Gemini API key (preferred if set)
-                  ANTHROPIC_API_KEY   Claude API key (fallback)
+                  GEMINI_API_KEY      Gemini API key
                   GEMINI_MODEL        Model override (default: gemini-2.5-flash)
-                  ANTHROPIC_MODEL     Model override (default: claude-sonnet-5)
 
                 Setup:
                   cp .env.example .env    # then add your key to .env
