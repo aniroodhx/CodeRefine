@@ -74,6 +74,115 @@ class NPlusOneDetectorTest {
         assertEquals(2, result.issueCount());
     }
 
+    @Test
+    void detectsLambdaForEachAccess() throws IOException {
+        writeEntity();
+        writeFile("OrderService.java", """
+                package com.example;
+
+                import java.util.List;
+
+                public class OrderService {
+                    public void printItemCounts(List<Order> orders) {
+                        orders.forEach(order -> {
+                            int count = order.getItems().size();
+                            System.out.println(count);
+                        });
+                    }
+                }
+                """);
+
+        AnalysisResult result = analyzer.analyze(tempDir);
+
+        assertTrue(result.hasIssues(), "Lambda-based lazy access should be detected");
+        NPlusOneIssue issue = result.issues().get(0);
+        assertEquals("Order", issue.entityType());
+        assertEquals("items", issue.lazyField());
+        assertEquals("stream", issue.loopType());
+    }
+
+    @Test
+    void detectsLambdaExpressionBodyAccess() throws IOException {
+        writeEntity();
+        writeFile("OrderService.java", """
+                package com.example;
+
+                import java.util.List;
+                import java.util.stream.Collectors;
+
+                public class OrderService {
+                    public List<Integer> itemCounts(List<Order> orders) {
+                        return orders.stream()
+                                .map(order -> order.getItems().size())
+                                .collect(Collectors.toList());
+                    }
+                }
+                """);
+
+        AnalysisResult result = analyzer.analyze(tempDir);
+
+        assertTrue(result.hasIssues(), "Lambda expression-body lazy access should be detected");
+        assertEquals("items", result.issues().get(0).lazyField());
+    }
+
+    @Test
+    void noFalsePositiveWhenGetterNameMatchesUnrelatedEntity() throws IOException {
+        // Order has a lazy 'items'. Customer has a non-lazy 'name'.
+        // Iterating Customers and calling getName() must NOT be flagged as Order.items.
+        writeEntity();
+        writeFile("Customer.java", """
+                package com.example;
+
+                import jakarta.persistence.*;
+
+                @Entity
+                public class Customer {
+                    @Id
+                    private Long id;
+
+                    @ManyToOne(fetch = FetchType.LAZY)
+                    private Region region;
+
+                    public Region getRegion() { return region; }
+                }
+                """);
+        writeFile("CustomerService.java", """
+                package com.example;
+
+                import java.util.List;
+
+                public class CustomerService {
+                    public void listItems(List<Order> orders) {
+                        for (Order order : orders) {
+                            // Only a non-lazy getter on Order — not the lazy 'items'.
+                            order.getId();
+                        }
+                    }
+                }
+                """);
+
+        AnalysisResult result = analyzer.analyze(tempDir);
+
+        assertFalse(result.hasIssues(),
+                "Accessing a non-lazy getter must not be misattributed as N+1");
+    }
+
+    @Test
+    void parseFailuresAreCountedNotSilentlyHidden() throws IOException {
+        writeEntity();
+        writeServiceWithNPlusOne();
+        // A file with a syntax error that JavaParser cannot handle.
+        writeFile("Broken.java", "package com.example; public class Broken { this is not java ");
+
+        var detector = new com.coderefine.core.detector.NPlusOneDetector(
+                new com.coderefine.core.parser.EntityParser().parseEntities(tempDir));
+        detector.detect(tempDir);
+
+        assertEquals(1, detector.getParseFailures(),
+                "The broken file should be counted as a parse failure");
+        assertTrue(detector.getFilesScanned() >= 3);
+    }
+
     private void writeEntity() throws IOException {
         String code = """
                 package com.example;

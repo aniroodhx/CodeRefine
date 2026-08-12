@@ -24,6 +24,7 @@ public class CodeRefineAnalyzer {
         NPlusOneDetector detector = new NPlusOneDetector(entityMap);
         List<NPlusOneIssue> issues = detector.detect(projectRoot);
 
-        return new AnalysisResult(projectRoot, entityMap, issues);
+        return new AnalysisResult(projectRoot, entityMap, issues,
+                detector.getFilesScanned(), detector.getParseFailures());
     }
 }

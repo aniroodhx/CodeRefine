@@ -41,6 +41,12 @@ public class CodeRefinePipeline {
         log.info("Layer 1: Analyzing {} for N+1 patterns...", projectRoot);
         AnalysisResult analysis = analyzer.analyze(projectRoot);
         List<NPlusOneIssue> issues = analysis.issues();
+        log.info("Scanned {} Java file(s); {} could not be parsed.",
+                analysis.filesScanned(), analysis.parseFailures());
+        if (analysis.hasPartialCoverage()) {
+            log.warn("Detection coverage is PARTIAL — {} file(s) were skipped. "
+                    + "Results may under-report issues.", analysis.parseFailures());
+        }
         log.info("Detected {} N+1 issue(s)", issues.size());
 
         if (issues.isEmpty()) {
