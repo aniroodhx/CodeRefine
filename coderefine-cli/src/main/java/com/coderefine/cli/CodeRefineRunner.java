@@ -1,5 +1,6 @@
 package com.coderefine.cli;
 
+import com.coderefine.cli.config.DotEnvLoader;
 import com.coderefine.cli.pipeline.CodeRefinePipeline;
 import com.coderefine.cli.report.PipelineReport;
 import com.coderefine.cli.report.ReportPrinter;
@@ -35,13 +36,15 @@ public class CodeRefineRunner implements CommandLineRunner {
 
         boolean skipVerification = hasFlag(args, "--no-verify");
 
-        LLMClient llmClient = resolveLLMClient();
+        DotEnvLoader env = new DotEnvLoader().load(Path.of(".env"));
+
+        LLMClient llmClient = resolveLLMClient(env);
         if (llmClient == null) {
             System.err.println("""
                     Error: No LLM API key found.
-                    Set one of:
-                      export GEMINI_API_KEY=your-key
-                      export ANTHROPIC_API_KEY=your-key
+                    Set a key in a .env file (see .env.example) or export one:
+                      GEMINI_API_KEY=your-key
+                      ANTHROPIC_API_KEY=your-key
                     """);
             return;
         }
@@ -56,27 +59,22 @@ public class CodeRefineRunner implements CommandLineRunner {
         System.out.println(printer.format(report));
     }
 
-    private LLMClient resolveLLMClient() {
-        String geminiKey = System.getenv("GEMINI_API_KEY");
+    private LLMClient resolveLLMClient(DotEnvLoader env) {
+        String geminiKey = env.get("GEMINI_API_KEY");
         if (geminiKey != null && !geminiKey.isBlank()) {
-            String model = envOrDefault("GEMINI_MODEL", "gemini-2.5-flash");
+            String model = env.getOrDefault("GEMINI_MODEL", "gemini-2.5-flash");
             log.info("Using Gemini ({})", model);
             return new GeminiClient(geminiKey, model);
         }
 
-        String anthropicKey = System.getenv("ANTHROPIC_API_KEY");
+        String anthropicKey = env.get("ANTHROPIC_API_KEY");
         if (anthropicKey != null && !anthropicKey.isBlank()) {
-            String model = envOrDefault("ANTHROPIC_MODEL", "claude-sonnet-5");
+            String model = env.getOrDefault("ANTHROPIC_MODEL", "claude-sonnet-5");
             log.info("Using Claude ({})", model);
             return new ClaudeClient(anthropicKey, model);
         }
 
         return null;
-    }
-
-    private String envOrDefault(String key, String defaultValue) {
-        String value = System.getenv(key);
-        return (value != null && !value.isBlank()) ? value : defaultValue;
     }
 
     private boolean hasFlag(String[] args, String flag) {
@@ -96,14 +94,14 @@ public class CodeRefineRunner implements CommandLineRunner {
                 Options:
                   --no-verify    Skip sandboxed verification (Layer 3)
 
-                Environment:
+                Configuration (via .env file or environment variables):
                   GEMINI_API_KEY      Gemini API key (preferred if set)
                   ANTHROPIC_API_KEY   Claude API key (fallback)
                   GEMINI_MODEL        Model override (default: gemini-2.5-flash)
                   ANTHROPIC_MODEL     Model override (default: claude-sonnet-5)
 
-                Example:
-                  export GEMINI_API_KEY=your-key
+                Setup:
+                  cp .env.example .env    # then add your key to .env
                   coderefine /path/to/spring-project
                 """);
     }
