@@ -35,5 +35,8 @@ subprojects {
 
     test {
         useJUnitPlatform()
+
+        def dockerApiVersion = System.getProperty('api.version') ?: '1.44'
+        systemProperty 'api.version', dockerApiVersion
     }
 }
