@@ -2,8 +2,8 @@ dependencies {
     implementation project(':coderefine-core')
     implementation project(':coderefine-llm')
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    implementation 'org.testcontainers:postgresql:1.19.8'
-    implementation 'org.testcontainers:junit-jupiter:1.19.8'
+    implementation 'org.testcontainers:postgresql:1.20.4'
+    implementation 'org.testcontainers:junit-jupiter:1.20.4'
     implementation 'org.postgresql:postgresql'
     implementation 'org.slf4j:slf4j-api'
 
