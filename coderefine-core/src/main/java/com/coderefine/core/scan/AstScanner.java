@@ -27,7 +27,9 @@ public class AstScanner {
         int failed = 0;
 
         try (Stream<Path> files = Files.walk(projectRoot)) {
-            for (Path file : (Iterable<Path>) files.filter(p -> p.toString().endsWith(".java"))::iterator) {
+            for(Path file : (Iterable<Path>) files
+                    .filter(p -> p.toString().endsWith(".java"))
+                    .filter(p -> !isTestSource(p))::iterator) {
                 scanned++;
                 try {
                     units.put(file, StaticJavaParser.parse(file));
@@ -38,13 +40,25 @@ public class AstScanner {
             }
         }
 
-        if (failed > 0) {
+        if(failed > 0){
             log.warn("Parsed {}/{} Java files; {} could not be parsed and were skipped. "
                     + "Detection coverage is partial.", scanned - failed, scanned, failed);
-        } else {
+        } else{
             log.info("Parsed {}/{} Java files successfully.", scanned, scanned);
         }
 
         return new ParsedProject(projectRoot, units, scanned, failed);
     }
+
+    private boolean isTestSource(Path file) {
+        String path = file.toString().replace('\\', '/');
+        if(path.contains("/src/test/") || path.contains("/test/java/")) {
+            return true;
+        }
+        String name = file.getFileName().toString();
+        return name.endsWith("Test.java")
+                || name.endsWith("Tests.java")
+                || name.endsWith("IT.java");
+    }
+
 }

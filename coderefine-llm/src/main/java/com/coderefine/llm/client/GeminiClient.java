@@ -5,6 +5,7 @@ import com.coderefine.llm.model.PatchSuggestion;
 import com.coderefine.llm.model.PatchSuggestion.FileChange;
 import com.coderefine.llm.model.PatchSuggestion.FixStrategy;
 import com.coderefine.llm.prompt.PatchPromptBuilder;
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -26,7 +27,7 @@ public class GeminiClient implements LLMClient {
                 .defaultHeader("content-type", "application/json")
                 .build();
         this.promptBuilder = new PatchPromptBuilder();
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = new ObjectMapper().configure(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS.mappedFeature(), true);
         this.model = model;
 
         this.apiKey = apiKey;

@@ -108,6 +108,30 @@ class UnboundedCollectionDetectorTest {
         assertEquals(0, result.countOf(IssueType.UNBOUNDED_COLLECTION));
     }
 
+    @Test
+    void ignoresFindAllInTestSources() throws IOException {
+        writeRepository();
+        writeFile("VetControllerTests.java", """
+                package com.example;
+
+                import java.util.List;
+
+                public class VetControllerTests {
+                    private final OrderRepository orderRepository = null;
+
+                    public void shouldReturnAll() {
+                        List<Order> all = orderRepository.findAll();
+                        assert all != null;
+                    }
+                }
+                """);
+
+        AnalysisResult result = analyzer.analyze(tempDir);
+
+        assertEquals(0, result.countOf(IssueType.UNBOUNDED_COLLECTION),
+                "findAll() in a *Tests file must not be flagged");
+    }
+
     private void writeRepository() throws IOException {
         writeFile("OrderRepository.java", """
                 package com.example;

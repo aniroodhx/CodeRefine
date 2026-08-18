@@ -29,6 +29,7 @@ public class PipelineReport {
     public List<Entry> entries() {
         return entries;
     }
+    public List<Issue> patchFailures() { return patchFailures; }
 
     public long approvedCount() {
         return entries.stream()

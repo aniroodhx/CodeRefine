@@ -19,7 +19,7 @@ public class ReportPrinter {
         sb.append(String.format("  ⚠️  Errors:          %d%n", report.errorCount()));
         sb.append(String.format("  🔧 Patch failures:   %d%n%n", report.patchFailureCount()));
 
-        if (report.entries().isEmpty()) {
+        if(report.entries().isEmpty() && report.patchFailures().isEmpty()){
             sb.append("  No issues to report.\n");
             sb.append(SEPARATOR).append("\n");
             return sb.toString();
@@ -30,7 +30,7 @@ public class ReportPrinter {
         sb.append(SEPARATOR).append("\n\n");
 
         int index = 1;
-        for (PipelineReport.Entry entry : report.entries()) {
+        for(PipelineReport.Entry entry : report.entries()) {
             VerificationResult v = entry.verification();
             String icon = switch (v.verdict()) {
                 case APPROVED -> "✅";
@@ -55,6 +55,16 @@ public class ReportPrinter {
             } else {
                 sb.append(String.format("     %s%n%n", v.reason()));
             }
+        }
+            if(!report.patchFailures().isEmpty()) {
+                sb.append(String.format("  🔧 Detected but no patch produced (%d):%n",
+                        report.patchFailures().size()));
+                for(com.coderefine.core.model.Issue issue : report.patchFailures()) {
+                    sb.append(String.format("     • [%s] %s.%s (line %d)%n",
+                            issue.type().label(), issue.className(),
+                            issue.methodName(), issue.lineNumber()));
+                }
+                sb.append("\n");
         }
 
         sb.append(SEPARATOR).append("\n");
