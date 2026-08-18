@@ -1,129 +1,83 @@
 package com.coderefine.core.detector;
 
 import com.coderefine.core.model.EntityRelationship;
+import com.coderefine.core.model.Issue;
+import com.coderefine.core.model.IssueType;
 import com.coderefine.core.model.NPlusOneIssue;
-import com.github.javaparser.StaticJavaParser;
+import com.coderefine.core.parser.EntityParser;
+import com.coderefine.core.scan.ParsedProject;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.stmt.ForEachStmt;
 import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Stream;
 
-public class NPlusOneDetector {
-
-    private static final Logger log = LoggerFactory.getLogger(NPlusOneDetector.class);
+public class NPlusOneDetector implements Detector {
 
     private static final Set<String> STREAM_OPERATIONS = Set.of("map", "forEach", "flatMap", "peek");
 
-    private final Map<String, List<EntityRelationship>> entityMap;
+    private final EntityParser entityParser = new EntityParser();
 
-    private int filesScanned;
-    private int parseFailures;
-
-    public NPlusOneDetector(Map<String, List<EntityRelationship>> entityMap) {
-        this.entityMap = entityMap;
+    @Override
+    public IssueType type() {
+        return IssueType.N_PLUS_ONE;
     }
 
-    public List<NPlusOneIssue> detect(Path projectRoot) throws IOException {
-        List<NPlusOneIssue> issues = new ArrayList<>();
-        AtomicInteger scanned = new AtomicInteger();
-        AtomicInteger failed = new AtomicInteger();
+    @Override
+    public List<Issue> detect(ParsedProject project) {
+        Map<String, List<EntityRelationship>> entityMap = entityParser.parseEntities(project);
+        List<Issue> issues = new ArrayList<>();
 
-        try (Stream<Path> files = Files.walk(projectRoot)) {
-            files.filter(p -> p.toString().endsWith(".java"))
-                    .forEach(file -> {
-                        scanned.incrementAndGet();
-                        if (!analyzeFile(file, issues)) {
-                            failed.incrementAndGet();
-                        }
-                    });
-        }
-
-        this.filesScanned = scanned.get();
-        this.parseFailures = failed.get();
-
-        if (parseFailures > 0) {
-            log.warn("Parsed {}/{} Java files; {} file(s) could not be parsed and were skipped. "
-                            + "Detection coverage on this project is partial.",
-                    filesScanned - parseFailures, filesScanned, parseFailures);
-        } else {
-            log.info("Parsed {}/{} Java files successfully.", filesScanned, filesScanned);
+        for (Map.Entry<Path, CompilationUnit> entry : project.compilationUnits().entrySet()) {
+            String filePath = entry.getKey().toString();
+            entry.getValue().findAll(ClassOrInterfaceDeclaration.class).forEach(cls -> {
+                String className = cls.getNameAsString();
+                cls.findAll(MethodDeclaration.class).forEach(method ->
+                        analyzeMethod(entityMap, filePath, className, method, issues));
+            });
         }
 
         return issues;
     }
 
-    /** Number of .java files walked in the last {@link #detect} run. */
-    public int getFilesScanned() {
-        return filesScanned;
-    }
-
-    /** Number of files that failed to parse (and were silently skipped) in the last run. */
-    public int getParseFailures() {
-        return parseFailures;
-    }
-
-    /** @return true if the file parsed, false if it was skipped due to a parse error. */
-    private boolean analyzeFile(Path file, List<NPlusOneIssue> issues) {
-        try {
-            CompilationUnit cu = StaticJavaParser.parse(file);
-            String filePath = file.toString();
-
-            cu.findAll(ClassOrInterfaceDeclaration.class).forEach(cls -> {
-                String className = cls.getNameAsString();
-                cls.findAll(MethodDeclaration.class).forEach(method ->
-                        analyzeMethod(filePath, className, method, issues));
-            });
-            return true;
-        } catch (Exception e) {
-            log.debug("Skipping unparseable file {}: {}", file, e.getMessage());
-            return false;
-        }
-    }
-
-    private void analyzeMethod(String filePath, String className,
-                               MethodDeclaration method, List<NPlusOneIssue> issues) {
+    private void analyzeMethod(Map<String, List<EntityRelationship>> entityMap,
+                               String filePath, String className,
+                               MethodDeclaration method, List<Issue> issues) {
         String methodName = method.getNameAsString();
         Map<String, String> variableTypes = resolveVariableTypes(method);
 
         method.findAll(ForEachStmt.class).forEach(loop -> {
-            String iteratorType = resolveIteratorEntityType(loop, variableTypes);
+            String iteratorType = resolveIteratorEntityType(entityMap, loop, variableTypes);
             if (iteratorType != null) {
-                detectLazyAccessInBody(loop.getBody(), filePath, className, methodName,
+                detectLazyAccessInBody(entityMap, loop.getBody(), filePath, className, methodName,
                         iteratorType, loop.getVariableDeclarator().getNameAsString(),
                         "for-each", issues);
             }
         });
 
         method.findAll(ForStmt.class).forEach(loop ->
-                detectLazyAccessInNode(loop.getBody(), filePath, className, methodName,
+                detectLazyAccessInNode(entityMap, loop.getBody(), filePath, className, methodName,
                         variableTypes, "for", issues));
 
         method.findAll(WhileStmt.class).forEach(loop ->
-                detectLazyAccessInNode(loop.getBody(), filePath, className, methodName,
+                detectLazyAccessInNode(entityMap, loop.getBody(), filePath, className, methodName,
                         variableTypes, "while", issues));
 
-        detectStreamLazyAccess(method, filePath, className, methodName, variableTypes, issues);
+        detectStreamLazyAccess(entityMap, method, filePath, className, methodName, variableTypes, issues);
     }
 
-    private void detectLazyAccessInBody(Node body,
+    private void detectLazyAccessInBody(Map<String, List<EntityRelationship>> entityMap, Node body,
                                         String filePath, String className, String methodName,
                                         String entityType, String variableName,
-                                        String loopType, List<NPlusOneIssue> issues) {
+                                        String loopType, List<Issue> issues) {
         List<EntityRelationship> relationships = entityMap.get(entityType);
         if (relationships == null) return;
 
@@ -138,10 +92,10 @@ public class NPlusOneDetector {
         });
     }
 
-    private void detectLazyAccessInNode(Node node,
+    private void detectLazyAccessInNode(Map<String, List<EntityRelationship>> entityMap, Node node,
                                         String filePath, String className, String methodName,
                                         Map<String, String> variableTypes,
-                                        String loopType, List<NPlusOneIssue> issues) {
+                                        String loopType, List<Issue> issues) {
         node.findAll(MethodCallExpr.class).forEach(call -> {
             call.getScope().ifPresent(scope -> {
                 String scopeName = extractRootVariable(scope.toString());
@@ -154,31 +108,32 @@ public class NPlusOneDetector {
         });
     }
 
-    private void detectStreamLazyAccess(MethodDeclaration method,
+    private void detectStreamLazyAccess(Map<String, List<EntityRelationship>> entityMap,
+                                        MethodDeclaration method,
                                         String filePath, String className, String methodName,
                                         Map<String, String> variableTypes,
-                                        List<NPlusOneIssue> issues) {
+                                        List<Issue> issues) {
         method.findAll(MethodCallExpr.class).stream()
                 .filter(call -> STREAM_OPERATIONS.contains(call.getNameAsString()))
                 .forEach(streamCall -> streamCall.getArguments().forEach(arg -> {
                     if (arg.isMethodReferenceExpr()) {
-                        handleMethodReference(streamCall, arg.asMethodReferenceExpr(),
+                        handleMethodReference(entityMap, streamCall, arg.asMethodReferenceExpr(),
                                 variableTypes, filePath, className, methodName, issues);
                     } else if (arg.isLambdaExpr()) {
-                        handleLambda(streamCall, arg.asLambdaExpr(),
+                        handleLambda(entityMap, streamCall, arg.asLambdaExpr(),
                                 variableTypes, filePath, className, methodName, issues);
                     }
                 }));
     }
 
-    private void handleMethodReference(MethodCallExpr streamCall,
+    private void handleMethodReference(Map<String, List<EntityRelationship>> entityMap,
+                                       MethodCallExpr streamCall,
                                        com.github.javaparser.ast.expr.MethodReferenceExpr ref,
                                        Map<String, String> variableTypes,
                                        String filePath, String className, String methodName,
-                                       List<NPlusOneIssue> issues) {
+                                       List<Issue> issues) {
         String identifier = ref.getIdentifier();
         String scope = ref.getScope().toString();
-        // Entity::getX -> scope is the entity type directly.
         String entityType = variableTypes.getOrDefault(scope, scope);
         if (!entityMap.containsKey(entityType)) return;
 
@@ -190,11 +145,11 @@ public class NPlusOneDetector {
         }
     }
 
-    private void handleLambda(MethodCallExpr streamCall, LambdaExpr lambda,
+    private void handleLambda(Map<String, List<EntityRelationship>> entityMap,
+                              MethodCallExpr streamCall, LambdaExpr lambda,
                               Map<String, String> variableTypes,
                               String filePath, String className, String methodName,
-                              List<NPlusOneIssue> issues) {
-        // Element type comes from the stream source, e.g. orders.stream() -> List<Order> -> Order.
+                              List<Issue> issues) {
         String sourceRoot = extractRootVariable(streamCall.getScope()
                 .map(Object::toString).orElse(""));
         String entityType = extractGenericElementType(variableTypes.get(sourceRoot));
@@ -217,7 +172,7 @@ public class NPlusOneDetector {
     private void recordIfLazyAccess(MethodCallExpr call, String entityType,
                                     List<EntityRelationship> relationships, String loopType,
                                     String filePath, String className, String methodName,
-                                    List<NPlusOneIssue> issues) {
+                                    List<Issue> issues) {
         String accessedMethod = call.getNameAsString();
         for (EntityRelationship rel : relationships) {
             if (isLazyRelationForField(rel, entityType, accessedMethod)) {
@@ -242,11 +197,6 @@ public class NPlusOneDetector {
                         + "triggers N+1 SELECT per element", field, entityType));
     }
 
-    /**
-     * True only if {@code rel} is a lazy relationship that (a) actually belongs to
-     * {@code entityType} and (b) is the target of the accessed getter. Guards against
-     * misattributing lazy risk to the wrong class when variable-type resolution is imperfect.
-     */
     private boolean isLazyRelationForField(EntityRelationship rel, String entityType,
                                            String accessedMethod) {
         return rel.isLazy()
@@ -256,17 +206,15 @@ public class NPlusOneDetector {
 
     private Map<String, String> resolveVariableTypes(MethodDeclaration method) {
         Map<String, String> types = new HashMap<>();
-
         method.getParameters().forEach(param ->
                 types.put(param.getNameAsString(), param.getTypeAsString()));
-
         method.findAll(VariableDeclarator.class).forEach(var ->
                 types.put(var.getNameAsString(), var.getTypeAsString()));
-
         return types;
     }
 
-    private String resolveIteratorEntityType(ForEachStmt loop, Map<String, String> variableTypes) {
+    private String resolveIteratorEntityType(Map<String, List<EntityRelationship>> entityMap,
+                                             ForEachStmt loop, Map<String, String> variableTypes) {
         String iterableExpr = loop.getIterable().toString();
         String varType = loop.getVariableDeclarator().getTypeAsString();
 
@@ -277,7 +225,6 @@ public class NPlusOneDetector {
         String rootVar = extractRootVariable(iterableExpr);
         String declaredType = variableTypes.get(rootVar);
         if (declaredType == null) return null;
-        // The iterable may be a collection (List<Order>) or the entity itself.
         return entityMap.containsKey(declaredType)
                 ? declaredType
                 : extractGenericElementType(declaredType);
@@ -293,18 +240,12 @@ public class NPlusOneDetector {
         return dotIndex > 0 ? expression.substring(0, dotIndex) : expression;
     }
 
-    /**
-     * Extracts the element type from a generic collection type string.
-     * e.g. {@code "List<Order>"} -> {@code "Order"}, {@code "Set<Tag>"} -> {@code "Tag"}.
-     * Returns {@code null} if there is no single generic argument.
-     */
     private String extractGenericElementType(String type) {
         if (type == null) return null;
         int open = type.indexOf('<');
         int close = type.lastIndexOf('>');
         if (open < 0 || close <= open) return null;
         String inner = type.substring(open + 1, close).strip();
-        // Only handle single-arg collections; skip Map<K,V> and nested generics.
         if (inner.contains(",") || inner.contains("<")) return null;
         return inner;
     }

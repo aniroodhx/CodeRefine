@@ -28,4 +28,13 @@ public class BlogService {
         }
         return summaries;
     }
+
+    /**
+     * UNBOUNDED COLLECTION BUG:
+     * findAll() with no pagination loads the entire authors table into memory.
+     * Fine with 10 rows, an OOM risk with millions.
+     */
+    public List<Author> everyAuthorEver() {
+        return authorRepository.findAll();   // <-- unbounded, no Pageable
+    }
 }

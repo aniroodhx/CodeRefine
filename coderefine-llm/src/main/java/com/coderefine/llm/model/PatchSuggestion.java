@@ -12,7 +12,8 @@ public record PatchSuggestion(
         JOIN_FETCH_QUERY,
         ENTITY_GRAPH,
         BATCH_SIZE,
-        DTO_PROJECTION
+        DTO_PROJECTION,
+        PAGINATION
     }
 
     public record FileChange(

@@ -1,6 +1,6 @@
 package com.coderefine.cli.report;
 
-import com.coderefine.core.model.NPlusOneIssue;
+import com.coderefine.core.model.Issue;
 import com.coderefine.llm.model.PatchSuggestion;
 import com.coderefine.verify.model.VerificationResult;
 
@@ -10,19 +10,19 @@ import java.util.List;
 public class PipelineReport {
 
     public record Entry(
-            NPlusOneIssue issue,
+            Issue issue,
             PatchSuggestion patch,
             VerificationResult verification
     ) {}
 
     private final List<Entry> entries = new ArrayList<>();
-    private final List<NPlusOneIssue> patchFailures = new ArrayList<>();
+    private final List<Issue> patchFailures = new ArrayList<>();
 
-    public void addEntry(NPlusOneIssue issue, PatchSuggestion patch, VerificationResult verification) {
+    public void addEntry(Issue issue, PatchSuggestion patch, VerificationResult verification) {
         entries.add(new Entry(issue, patch, verification));
     }
 
-    public void addPatchFailure(NPlusOneIssue issue) {
+    public void addPatchFailure(Issue issue) {
         patchFailures.add(issue);
     }
 
@@ -51,7 +51,7 @@ public class PipelineReport {
     public int totalQueriesReduced() {
         return entries.stream()
                 .filter(e -> e.verification().verdict() == VerificationResult.Verdict.APPROVED)
-                .mapToInt(e -> e.verification().queriesReduced())
+                .mapToInt(e -> e.verification().reduced())
                 .sum();
     }
 

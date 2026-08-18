@@ -34,7 +34,7 @@ class NPlusOneDetectorTest {
         assertTrue(result.hasIssues());
         assertEquals(1, result.issueCount());
 
-        NPlusOneIssue issue = result.issues().get(0);
+        NPlusOneIssue issue = (NPlusOneIssue) result.issues().get(0);
         assertEquals("OrderService", issue.className());
         assertEquals("getAllOrderItems", issue.methodName());
         assertEquals("Order", issue.entityType());
@@ -60,7 +60,7 @@ class NPlusOneDetectorTest {
         AnalysisResult result = analyzer.analyze(tempDir);
 
         assertTrue(result.hasIssues());
-        NPlusOneIssue issue = result.issues().get(0);
+        NPlusOneIssue issue = (NPlusOneIssue) result.issues().get(0);
         assertEquals("stream", issue.loopType());
     }
 
@@ -95,7 +95,7 @@ class NPlusOneDetectorTest {
         AnalysisResult result = analyzer.analyze(tempDir);
 
         assertTrue(result.hasIssues(), "Lambda-based lazy access should be detected");
-        NPlusOneIssue issue = result.issues().get(0);
+        NPlusOneIssue issue = (NPlusOneIssue) result.issues().get(0);
         assertEquals("Order", issue.entityType());
         assertEquals("items", issue.lazyField());
         assertEquals("stream", issue.loopType());
@@ -122,7 +122,7 @@ class NPlusOneDetectorTest {
         AnalysisResult result = analyzer.analyze(tempDir);
 
         assertTrue(result.hasIssues(), "Lambda expression-body lazy access should be detected");
-        assertEquals("items", result.issues().get(0).lazyField());
+        assertEquals("items", ((NPlusOneIssue) result.issues().get(0)).lazyField());
     }
 
     @Test
@@ -174,13 +174,12 @@ class NPlusOneDetectorTest {
         // A file with a syntax error that JavaParser cannot handle.
         writeFile("Broken.java", "package com.example; public class Broken { this is not java ");
 
-        var detector = new com.coderefine.core.detector.NPlusOneDetector(
-                new com.coderefine.core.parser.EntityParser().parseEntities(tempDir));
-        detector.detect(tempDir);
+        AnalysisResult result = analyzer.analyze(tempDir);
 
-        assertEquals(1, detector.getParseFailures(),
+        assertEquals(1, result.parseFailures(),
                 "The broken file should be counted as a parse failure");
-        assertTrue(detector.getFilesScanned() >= 3);
+        assertTrue(result.filesScanned() >= 3);
+        assertTrue(result.hasPartialCoverage());
     }
 
     private void writeEntity() throws IOException {

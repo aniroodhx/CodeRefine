@@ -3,6 +3,7 @@ package com.coderefine.core.parser;
 import com.coderefine.core.model.EntityRelationship;
 import com.coderefine.core.model.EntityRelationship.FetchType;
 import com.coderefine.core.model.EntityRelationship.RelationType;
+import com.coderefine.core.scan.ParsedProject;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -35,6 +36,18 @@ public class EntityParser {
             RelationType.ONE_TO_ONE, FetchType.EAGER
     );
 
+    /** Build the entity map from an already-parsed project (preferred — no re-parsing). */
+    public Map<String, List<EntityRelationship>> parseEntities(ParsedProject project) {
+        Map<String, List<EntityRelationship>> entityMap = new HashMap<>();
+        for (CompilationUnit cu : project.units()) {
+            cu.findAll(ClassOrInterfaceDeclaration.class).stream()
+                    .filter(this::isEntity)
+                    .forEach(cls -> parseEntityClass(cls, entityMap));
+        }
+        return entityMap;
+    }
+
+    /** Walk and parse a project directory directly. Retained for standalone/test use. */
     public Map<String, List<EntityRelationship>> parseEntities(Path projectRoot) throws IOException {
         Map<String, List<EntityRelationship>> entityMap = new HashMap<>();
 

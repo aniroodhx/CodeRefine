@@ -10,15 +10,14 @@ public class ReportPrinter {
         StringBuilder sb = new StringBuilder();
 
         sb.append("\n").append(SEPARATOR).append("\n");
-        sb.append("  CodeRefine — N+1 Query Analysis Report\n");
+        sb.append("  CodeRefine — Performance Analysis Report\n");
         sb.append(SEPARATOR).append("\n\n");
 
         sb.append(String.format("  Issues detected:    %d%n", report.totalIssuesDetected()));
         sb.append(String.format("  ✅ Fixes approved:   %d%n", report.approvedCount()));
         sb.append(String.format("  ❌ Fixes rejected:   %d%n", report.rejectedCount()));
         sb.append(String.format("  ⚠️  Errors:          %d%n", report.errorCount()));
-        sb.append(String.format("  🔧 Patch failures:   %d%n", report.patchFailureCount()));
-        sb.append(String.format("  📉 Queries saved:    %d%n%n", report.totalQueriesReduced()));
+        sb.append(String.format("  🔧 Patch failures:   %d%n%n", report.patchFailureCount()));
 
         if (report.entries().isEmpty()) {
             sb.append("  No issues to report.\n");
@@ -39,24 +38,30 @@ public class ReportPrinter {
                 case ERROR -> "⚠️";
             };
 
-            sb.append(String.format("  %d. %s %s.%s (line %d)%n",
+            sb.append(String.format("  %d. %s [%s] %s.%s (line %d)%n",
                     index++, icon,
+                    entry.issue().type().label(),
                     entry.issue().className(),
                     entry.issue().methodName(),
                     entry.issue().lineNumber()));
-            sb.append(String.format("     Entity: %s | Lazy field: %s | Loop: %s%n",
-                    entry.issue().entityType(),
-                    entry.issue().lazyField(),
-                    entry.issue().loopType()));
+            sb.append(String.format("     %s%n", entry.issue().description()));
             if (entry.patch() != null) {
                 sb.append(String.format("     Strategy: %s%n", entry.patch().strategy()));
                 sb.append(String.format("     Fix: %s%n", entry.patch().explanation()));
             }
-            sb.append(String.format("     Queries: %d → %d | %s%n%n",
-                    v.queryCountBefore(), v.queryCountAfter(), v.reason()));
+            if (v.verdict() != VerificationResult.Verdict.ERROR) {
+                sb.append(String.format("     %s: %d → %d | %s%n%n",
+                        capitalize(v.metricName()), v.valueBefore(), v.valueAfter(), v.reason()));
+            } else {
+                sb.append(String.format("     %s%n%n", v.reason()));
+            }
         }
 
         sb.append(SEPARATOR).append("\n");
         return sb.toString();
+    }
+
+    private String capitalize(String s) {
+        return (s == null || s.isEmpty()) ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 }

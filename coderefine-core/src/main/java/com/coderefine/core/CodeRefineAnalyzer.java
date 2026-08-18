@@ -1,30 +1,48 @@
 package com.coderefine.core;
 
+import com.coderefine.core.detector.Detector;
 import com.coderefine.core.detector.NPlusOneDetector;
+import com.coderefine.core.detector.UnboundedCollectionDetector;
 import com.coderefine.core.model.AnalysisResult;
-import com.coderefine.core.model.EntityRelationship;
-import com.coderefine.core.model.NPlusOneIssue;
-import com.coderefine.core.parser.EntityParser;
+import com.coderefine.core.model.Issue;
+import com.coderefine.core.scan.AstScanner;
+import com.coderefine.core.scan.ParsedProject;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
+/**
+ * Scans a project once, then runs every registered {@link Detector} against the
+ * shared parse result. Adding a detector is a one-line registration here.
+ */
 public class CodeRefineAnalyzer {
 
-    private final EntityParser entityParser;
+    private final AstScanner scanner;
+    private final List<Detector> detectors;
 
     public CodeRefineAnalyzer() {
-        this.entityParser = new EntityParser();
+        this(List.of(
+                new NPlusOneDetector(),
+                new UnboundedCollectionDetector()
+        ));
+    }
+
+    public CodeRefineAnalyzer(List<Detector> detectors) {
+        this.scanner = new AstScanner();
+        this.detectors = detectors;
     }
 
     public AnalysisResult analyze(Path projectRoot) throws IOException {
-        Map<String, List<EntityRelationship>> entityMap = entityParser.parseEntities(projectRoot);
-        NPlusOneDetector detector = new NPlusOneDetector(entityMap);
-        List<NPlusOneIssue> issues = detector.detect(projectRoot);
+        ParsedProject project = scanner.scan(projectRoot);
 
-        return new AnalysisResult(projectRoot, entityMap, issues,
-                detector.getFilesScanned(), detector.getParseFailures());
+        List<Issue> issues = new ArrayList<>();
+        for (Detector detector : detectors) {
+            issues.addAll(detector.detect(project));
+        }
+
+        return new AnalysisResult(projectRoot, issues,
+                project.filesScanned(), project.parseFailures());
     }
 }

@@ -1,54 +1,66 @@
 package com.coderefine.verify.sandbox;
 
+import com.coderefine.core.model.Issue;
+import com.coderefine.core.model.IssueType;
 import com.coderefine.llm.model.PatchSuggestion;
-import com.coderefine.verify.counter.QueryCounter;
-import com.coderefine.verify.counter.QueryCountingDataSource;
 import com.coderefine.verify.model.VerificationResult;
+import com.coderefine.verify.strategy.QueryCountStrategy;
+import com.coderefine.verify.strategy.ResultSetSizeStrategy;
+import com.coderefine.verify.strategy.VerificationStrategy;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.Statement;
-import java.util.function.Consumer;
+import java.util.EnumMap;
+import java.util.Map;
 
+/**
+ * Runs a patch through a real Postgres sandbox and returns a verdict. The
+ * measurement is delegated to a {@link VerificationStrategy} chosen by the
+ * issue type, so each anti-pattern is proven with the metric that fits it
+ * (queries for N+1, rows for unbounded collections).
+ */
 public class SandboxVerifier {
 
-    public VerificationResult verify(PatchSuggestion patch, VerificationScenario scenario) {
+    private final Map<IssueType, VerificationStrategy> strategies = new EnumMap<>(IssueType.class);
+
+    public SandboxVerifier() {
+        register(new QueryCountStrategy());
+        register(new ResultSetSizeStrategy());
+    }
+
+    private void register(VerificationStrategy strategy) {
+        strategies.put(strategy.type(), strategy);
+    }
+
+    public VerificationResult verify(Issue issue, PatchSuggestion patch) {
+        VerificationStrategy strategy = strategies.get(issue.type());
+        if (strategy == null) {
+            return VerificationResult.error(patch.issueDescription(),
+                    "No verification strategy for issue type " + issue.type());
+        }
+
+        VerificationScenario scenario = strategy.buildScenario(issue);
+
         try (PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine")) {
             postgres.start();
 
-            DataSource rawDataSource = createDataSource(postgres);
-            QueryCounter counter = new QueryCounter();
-            QueryCountingDataSource countingDs = new QueryCountingDataSource(rawDataSource, counter);
+            DataSource ds = createDataSource(postgres);
+            initialize(ds, scenario.schemaSetup());
+            initialize(ds, scenario.dataSetup());
 
-            initializeSchema(rawDataSource, scenario.schemaSetup());
-            insertTestData(rawDataSource, scenario.dataSetup());
+            int before = scenario.measureBefore().applyAsInt(ds);
+            int after = scenario.measureAfter().applyAsInt(ds);
 
-            counter.reset();
-            boolean testsBefore = runScenario(countingDs, scenario.beforeExecution());
-            int queryCountBefore = counter.getCount();
-
-            counter.reset();
-            boolean testsAfter = runScenario(countingDs, scenario.afterExecution());
-            int queryCountAfter = counter.getCount();
-
-            if (!testsAfter) {
-                return VerificationResult.rejected(
-                        patch.issueDescription(), queryCountBefore, queryCountAfter,
-                        testsBefore, testsAfter,
-                        "Patched code breaks existing tests");
+            if (strategy.isImprovement(before, after)) {
+                return VerificationResult.approved(
+                        patch.issueDescription(), scenario.metricName(), before, after);
             }
-
-            if (queryCountAfter >= queryCountBefore) {
-                return VerificationResult.rejected(
-                        patch.issueDescription(), queryCountBefore, queryCountAfter,
-                        testsBefore, testsAfter,
-                        String.format("No improvement: %d queries before, %d after",
-                                queryCountBefore, queryCountAfter));
-            }
-
-            return VerificationResult.approved(
-                    patch.issueDescription(), queryCountBefore, queryCountAfter);
+            return VerificationResult.rejected(
+                    patch.issueDescription(), scenario.metricName(), before, after,
+                    String.format("No improvement: %d %s before, %d after",
+                            before, scenario.metricName(), after));
 
         } catch (Exception e) {
             return VerificationResult.error(patch.issueDescription(),
@@ -64,30 +76,13 @@ public class SandboxVerifier {
         return ds;
     }
 
-    private void initializeSchema(DataSource ds, String schemaSql) {
+    private void initialize(DataSource ds, String sql) {
+        if (sql == null || sql.isBlank()) return;
         try (Connection conn = ds.getConnection();
              Statement stmt = conn.createStatement()) {
-            stmt.execute(schemaSql);
+            stmt.execute(sql);
         } catch (Exception e) {
-            throw new RuntimeException("Schema setup failed: " + e.getMessage(), e);
-        }
-    }
-
-    private void insertTestData(DataSource ds, String dataSql) {
-        try (Connection conn = ds.getConnection();
-             Statement stmt = conn.createStatement()) {
-            stmt.execute(dataSql);
-        } catch (Exception e) {
-            throw new RuntimeException("Data setup failed: " + e.getMessage(), e);
-        }
-    }
-
-    private boolean runScenario(DataSource ds, Consumer<DataSource> execution) {
-        try {
-            execution.accept(ds);
-            return true;
-        } catch (Exception e) {
-            return false;
+            throw new RuntimeException("Sandbox setup failed: " + e.getMessage(), e);
         }
     }
 }

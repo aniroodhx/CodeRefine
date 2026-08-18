@@ -89,7 +89,7 @@ class PatchGeneratorTest {
 
         assertNotNull(captured[0]);
         assertTrue(captured[0].entitySource().contains("@Entity"));
-        assertTrue(captured[0].serviceSource().contains("OrderService"));
+        assertTrue(captured[0].primarySource().contains("OrderService"));
         assertTrue(captured[0].repositorySource().contains("OrderRepository"));
     }
 

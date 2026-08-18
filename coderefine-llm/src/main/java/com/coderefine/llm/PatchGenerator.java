@@ -1,6 +1,6 @@
 package com.coderefine.llm;
 
-import com.coderefine.core.model.NPlusOneIssue;
+import com.coderefine.core.model.Issue;
 import com.coderefine.llm.client.LLMClient;
 import com.coderefine.llm.context.ContextBuilder;
 import com.coderefine.llm.model.PatchContext;
@@ -21,11 +21,11 @@ public class PatchGenerator {
         this.contextBuilder = new ContextBuilder();
     }
 
-    public List<PatchSuggestion> generatePatches(List<NPlusOneIssue> issues, Path projectRoot)
+    public List<PatchSuggestion> generatePatches(List<? extends Issue> issues, Path projectRoot)
             throws IOException {
         List<PatchSuggestion> patches = new ArrayList<>();
 
-        for (NPlusOneIssue issue : issues) {
+        for (Issue issue : issues) {
             PatchContext context = contextBuilder.buildContext(issue, projectRoot);
             PatchSuggestion patch = llmClient.generatePatch(context);
             patches.add(patch);

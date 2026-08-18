@@ -87,10 +87,7 @@ public class GeminiClient implements LLMClient {
                 ));
             }
 
-            String issueDesc = String.format("N+1 on %s.%s in method %s",
-                    context.entityName(), context.lazyField(), context.methodName());
-
-            return new PatchSuggestion(issueDesc, strategy, changes, explanation);
+            return new PatchSuggestion(context.issue().description(), strategy, changes, explanation);
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse Gemini response: " + e.getMessage(), e);
         }
