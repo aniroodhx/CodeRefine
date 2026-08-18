@@ -51,7 +51,7 @@ public class GeminiClient implements LLMClient {
                 ),
                 "generationConfig", Map.of(
                         "responseMimeType", "application/json",
-                        "maxOutputTokens", 4096
+                        "maxOutputTokens", 8192
                 )
         );
 
@@ -68,7 +68,15 @@ public class GeminiClient implements LLMClient {
     private PatchSuggestion parseResponse(String response, PatchContext context) {
         try {
             JsonNode root = objectMapper.readTree(response);
-            String content = root.path("candidates").get(0)
+            JsonNode candidate = root.path("candidates").get(0);
+
+            String finishReason = candidate.path("finishReason").asText("");
+            if("MAX_TOKENS".equals(finishReason)) {
+                throw new IllegalStateException(
+                        "response truncated at max output tokens — patch too large to return");
+            }
+
+            String content = candidate
                     .path("content").path("parts").get(0)
                     .path("text").asText();
 
@@ -79,7 +87,7 @@ public class GeminiClient implements LLMClient {
             String explanation = patch.path("explanation").asText();
 
             List<FileChange> changes = new ArrayList<>();
-            for (JsonNode change : patch.path("changes")) {
+            for(JsonNode change : patch.path("changes")) {
                 changes.add(new FileChange(
                         change.path("filePath").asText(),
                         change.path("originalCode").asText(),

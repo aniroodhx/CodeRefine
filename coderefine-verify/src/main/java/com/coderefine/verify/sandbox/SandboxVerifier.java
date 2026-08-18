@@ -23,6 +23,11 @@ import java.util.Map;
  */
 public class SandboxVerifier {
 
+    static {
+        if(System.getProperty("api.version")== null){
+            System.setProperty("api.version", "1.44");
+        }
+    }
     private final Map<IssueType, VerificationStrategy> strategies = new EnumMap<>(IssueType.class);
 
     public SandboxVerifier() {
