@@ -65,6 +65,11 @@ public class ReportPrinter {
                             issue.methodName(), issue.lineNumber()));
                 }
                 sb.append("\n");
+            }
+
+        if(report.approvedCount() > 0) {
+            sb.append(String.format("  ➜ %d verified fix(es) accepted after proving measurable improvement.%n%n",
+                    report.approvedCount()));
         }
 
         sb.append(SEPARATOR).append("\n");
@@ -72,6 +77,6 @@ public class ReportPrinter {
     }
 
     private String capitalize(String s) {
-        return (s == null || s.isEmpty()) ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
+        return (s==null || s.isEmpty()) ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 }

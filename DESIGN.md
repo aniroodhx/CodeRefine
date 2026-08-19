@@ -1,4 +1,4 @@
-# CodeRefine — Design Notes
+# CodeRefine - Design Notes
 
 Architecture decisions and rationale, kept as the system evolves. This doubles
 as the "why" behind the code for anyone reviewing it.
@@ -7,11 +7,11 @@ as the "why" behind the code for anyone reviewing it.
 
 A three-layer pipeline where **no fix is accepted without proof**:
 
-1. **Detect** (deterministic, local) — AST analysis flags anti-patterns. No LLM,
+1. **Detect** (deterministic, local) - AST analysis flags anti-patterns. No LLM,
    no code leaves the machine unless something is actually found.
-2. **Patch** (LLM) — only the minimal relevant context for one issue is sent to
+2. **Patch** (LLM) - only the minimal relevant context for one issue is sent to
    the model, which returns a structured patch.
-3. **Verify** (sandbox) — the patch is run in a real Postgres (Testcontainers)
+3. **Verify** (sandbox) - the patch is run in a real Postgres (Testcontainers)
    and measured. Only measurable improvements are approved.
 
 The verification layer is the differentiator. Most tools stop at "here's a
@@ -22,7 +22,7 @@ suggestion"; this one proves the suggestion works before trusting it.
 The central V2 decision was to make **both ends of the pipeline extensible in a
 symmetric way**, rather than special-casing each new anti-pattern.
 
-### Detection side — `Detector`
+### Detection side - `Detector`
 
 - `AstScanner` walks the project and parses each file **once** into a shared
   `ParsedProject` (also tracks scan/parse-failure counts for honest coverage
@@ -36,7 +36,7 @@ symmetric way**, rather than special-casing each new anti-pattern.
 
 Detectors today: N+1 queries, unbounded collections (`findAll()` with no bound).
 
-### Verification side — `VerificationStrategy`
+### Verification side - `VerificationStrategy`
 
 The key insight: **different bugs need different proof, not the same metric.**
 
